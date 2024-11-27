@@ -4,47 +4,46 @@
 #include <random>
 #include <chrono>
 #include <thread>
+#include <fstream>
 
 #include "src/kmeans_seq.cpp"
 #include "src/kmeans_par.cpp"
 #include "src/kmeans_par_simd.cpp"
-#include "src/kmeans_par_soa.cpp"
 #include "src/kmeans_par_single.cpp"
 #include "src/kmeans_seq_single.cpp"
 #include "src/kmeans_par_single_soa.cpp"
 
-void generatePoints_AOS(int n, int dim, std::vector<std::vector<double>> &points, std::vector<std::vector<double>> &pointsSOA) {
-    int lb_gs = 2;
-    int ub_gs = 6;
-    double lb_mean = -3000;
-    double ub_mean = 3000;
+void generatePoints(int n, int dim, std::vector<std::vector<double>> &points, std::vector<std::vector<double>> &pointsSOA) {
+    /*int lb_gs = 3;
+    int ub_gs = 7;
+    double lb_mean = -4000;
+    double ub_mean = 4000;
     double lb_var = 0.5;
-    double ub_var = 6;
+    double ub_var = 6;*/
 
-    std::uniform_int_distribution<> unif_gaussians(lb_gs,ub_gs);
+    /*std::uniform_int_distribution<> unif_gaussians(lb_gs,ub_gs);
     std::uniform_real_distribution<> unif_means(lb_mean,ub_mean);
-    std::uniform_real_distribution<> unif_var(lb_var,ub_var);
+    std::uniform_real_distribution<> unif_var(lb_var,ub_var);*/
     std::random_device rd; 
 	std::mt19937 re(rd());
 
-    int gaussians_size = unif_gaussians(re);
+    /*int gaussians_size = unif_gaussians(re);
     std::vector<std::normal_distribution<double>> gaussians;
     for(int i=0; i<gaussians_size; i++){
         int mean = unif_means(re);
         int var = unif_var(re);
 
         gaussians.push_back(std::normal_distribution<double>(mean, var));
-    }
+    }*/
 
     pointsSOA = std::vector<std::vector<double>>(dim, std::vector<double>(n, 0.0));
 
-    std::uniform_int_distribution<> unif(0,gaussians_size);
+    //std::uniform_int_distribution<> unif(0,gaussians_size);
+    std::uniform_int_distribution<> unif(-3000,3000);
     for(int i=0; i<n; i++){
         std::vector<double> p;
         for(int j=0; j<dim; j++){
-            int k = unif(re);
-            std::normal_distribution<double> gs = gaussians[k];
-            double v = gs(re);
+            double v = unif(re);
             p.push_back(v);
             pointsSOA[j][i] = v;
         }
@@ -94,121 +93,130 @@ void init_centroids(const std::vector<std::vector<double>> &points, const int k,
 int main(int, char**){
     using namespace std::chrono_literals;
 
-    const int k = 5;
-    const long num_of_points = 100000;
-    const int dim = 15;
+    int threads[] = {16, 24, 32};
+    long n[] = {5000000, 10000000};
+    int d[] = {2};
 
-    std::vector<std::vector<double>> points;
-    std::vector<std::vector<double>> pointsSOA;
-    std::vector<std::vector<double>> int_centroids;
-    std::vector<std::vector<double>> int_centroidsSOA;
-    
-    generatePoints_AOS(num_of_points, dim, points, pointsSOA);
-    init_centroids(points, k, int_centroids, int_centroidsSOA);
+    std::ofstream file("high_dimensional_speedup.csv");
+    file << "th" << ", "
+                << "k, "
+                << "dim, "
+                << "num_points, "
+                << "par_mean, "
+                //<< "par_simd_mean, "
+                << "par_single_mean, "
+                << "par_stdev, "
+                //<< "par_simd_stdev, "
+                << "par_single_stdev" 
+                << "\n";
+                file.flush();
 
-    auto t1 = std::chrono::high_resolution_clock::now();
-    auto c_seq = kmeans_seq(k, points, int_centroids);
-    auto t2 = std::chrono::high_resolution_clock::now();
+    for(int th=0; th<3; th++){
+        omp_set_num_threads(threads[th]);
 
-    std::chrono::duration<double, std::milli> ms_double = t2 - t1;
-    std::cout << ms_double.count() << "ms       seq\n";
+        for(int i = 0; i<1; i++){
+            for(int j = 0; j<2; j++){
 
-    std::this_thread::sleep_for(1s);
-    
-    t1 = std::chrono::high_resolution_clock::now();
-    auto c_par = kmeans_par(k, points, int_centroids);
-    t2 = std::chrono::high_resolution_clock::now();
+                std::vector<std::vector<double>> speed_res(3, std::vector<double>(5, 0.0));
+                for(int w = 0; w<5; w++){
+                    const int k = 5;
+                    const long num_of_points = n[j];
+                    const int dim = d[i];
 
-    ms_double = t2 - t1;
-    std::cout << ms_double.count() << "ms       par\n";
+                    std::vector<std::vector<double>> points;
+                    std::vector<std::vector<double>> pointsSOA;
+                    std::vector<std::vector<double>> int_centroids;
+                    std::vector<std::vector<double>> int_centroidsSOA;
+                    
+                    generatePoints(num_of_points, dim, points, pointsSOA);
+                    init_centroids(points, k, int_centroids, int_centroidsSOA);
 
-    std::this_thread::sleep_for(1s);
-    
-    t1 = std::chrono::high_resolution_clock::now();
-    auto c_par_simd = kmeans_par_simd(k, points, int_centroids);
-    t2 = std::chrono::high_resolution_clock::now();
+                    auto t1 = std::chrono::high_resolution_clock::now();
+                    auto c_seq = kmeans_seq(k, points, int_centroids);
+                    auto t2 = std::chrono::high_resolution_clock::now();
+                    std::chrono::duration<double, std::milli> ms_seq = t2 - t1;
+                    std::cout << ms_seq.count() << "ms       seq\n";
+                    
+                    t1 = std::chrono::high_resolution_clock::now();
+                    auto c_par = kmeans_par(k, points, int_centroids);
+                    t2 = std::chrono::high_resolution_clock::now();
+                    std::chrono::duration<double, std::milli> ms_par = t2 - t1;
+                    std::cout << ms_par.count() << "ms       par\n";
+                    
+                    /*t1 = std::chrono::high_resolution_clock::now();
+                    auto c_par_simd = kmeans_par_simd(k, points, int_centroids);
+                    t2 = std::chrono::high_resolution_clock::now();
+                    std::chrono::duration<double, std::milli> ms_par_simd = t2 - t1;
+                    std::cout << ms_par_simd.count() << "ms       par_simd\n";*/
+                    
+                    t1 = std::chrono::high_resolution_clock::now();
+                    auto c_par_single = kmeans_par_single(k, points, int_centroids);
+                    t2 = std::chrono::high_resolution_clock::now();
+                    std::chrono::duration<double, std::milli> ms_par_single = t2 - t1;
+                    std::cout << ms_par_single.count() << "ms       par_single\n";
 
-    ms_double = t2 - t1;
-    std::cout << ms_double.count() << "ms       par_simd\n";
+                    t1 = std::chrono::high_resolution_clock::now();
+                    auto c_seq_single = kmeans_seq_single(k, points, int_centroids);
+                    t2 = std::chrono::high_resolution_clock::now();
+                    std::chrono::duration<double, std::milli> ms_seq_single = t2 - t1;
+                    std::cout << ms_seq_single.count() << "ms       seq_single\n";
 
-    std::this_thread::sleep_for(1s);
-    
-    t1 = std::chrono::high_resolution_clock::now();
-    auto c_par_soa = kmeans_par_soa(k, points, int_centroids);
-    t2 = std::chrono::high_resolution_clock::now();
+                    /*auto t1 = std::chrono::high_resolution_clock::now();
+                    auto c_par_single_soa = kmeans_par_single_soa(k, pointsSOA, int_centroidsSOA);
+                    auto t2 = std::chrono::high_resolution_clock::now();
 
-    ms_double = t2 - t1;
-    std::cout << ms_double.count() << "ms       par_soa\n";
+                    auto ms_par_single_soa = t2 - t1;
+                    std::cout << ms_par_single_soa.count() << "ms       par_single_soa\n";*/
 
-    std::this_thread::sleep_for(1s);
-    
-    t1 = std::chrono::high_resolution_clock::now();
-    auto c_par_single = kmeans_par_single(k, points, int_centroids);
-    t2 = std::chrono::high_resolution_clock::now();
+                    auto speedup_par = ms_seq/ms_par;
+                    //auto speedup_par_simd = ms_seq/ms_par_simd;
+                    auto speedup_par_single = ms_seq_single/ms_par_single;
 
-    ms_double = t2 - t1;
-    std::cout << ms_double.count() << "ms       par_single\n";
+                    speed_res[0][w] = speedup_par;
+                    //speed_res[1][w] = speedup_par_simd;
+                    speed_res[1][w] = speedup_par_single;               
+                }
 
-    std::this_thread::sleep_for(1s);
+                auto par_mean = std::accumulate(speed_res[0].begin(), speed_res[0].end(), 0.0)/speed_res[0].size();
+                //auto par_simd_mean = std::accumulate(speed_res[1].begin(), speed_res[1].end(), 0.0)/speed_res[1].size();
+                auto par_single_mean = std::accumulate(speed_res[1].begin(), speed_res[1].end(), 0.0)/speed_res[1].size();
 
-    t1 = std::chrono::high_resolution_clock::now();
-    auto c_seq_single = kmeans_seq_single(k, points, int_centroids);
-    t2 = std::chrono::high_resolution_clock::now();
+                double accum = 0.0;
+                std::for_each (speed_res[0].begin(), speed_res[0].end(), [&](const double d) {
+                    accum += (d - par_mean) * (d - par_mean);
+                });
 
-    ms_double = t2 - t1;
-    std::cout << ms_double.count() << "ms       seq_single\n";
+                double par_stdev = sqrt(accum / (speed_res[0].size()-1));
 
-    std::this_thread::sleep_for(1s);
+                /*accum = 0.0;
+                std::for_each (speed_res[1].begin(), speed_res[1].end(), [&](const double d) {
+                    accum += (d - par_simd_mean) * (d - par_simd_mean);
+                });
 
-    t1 = std::chrono::high_resolution_clock::now();
-    auto c_par_single_soa = kmeans_par_single_soa(k, pointsSOA, int_centroidsSOA);
-    t2 = std::chrono::high_resolution_clock::now();
+                double par_simd_stdev = sqrt(accum / (speed_res[1].size()-1));*/
 
-    ms_double = t2 - t1;
-    std::cout << ms_double.count() << "ms       par_single_soa\n";
+                accum = 0.0;
+                std::for_each (speed_res[1].begin(), speed_res[1].end(), [&](const double d) {
+                    accum += (d - par_single_mean) * (d - par_single_mean);
+                });
 
-    /*for(const auto p: points){
-        std::cout<< "\n";
-        std::cout<< "(";
-        int i = 1;
-        for(const double c: p){
-            std::cout << c;
-            if(i < dim)
-                std::cout << ", ";
-            i++;
-        }
-        std::cout<< ")";
-    }*/
+                double par_single_stdev = sqrt(accum / (speed_res[1].size()-1));
 
-    /*std::cout << "\n\n -------------- Clusters --------------";
-    for(auto cls: clusters){
-        std::cout << "\n----- cls -----";
-        for(const auto i: cls){
-            auto p = points[i];
-            std::cout<< "\n";
-            std::cout<< "(";
-            int k = 1;
-            for(const double c: p){
-                std::cout << c;
-                if(k < dim)
-                    std::cout << ", ";
-                k++;
+                file << threads[th] << ", "
+                << 5 << ", "
+                << d[i] << ", "
+                << n[j] << ", "
+                << par_mean << ", "
+                //<< par_simd_mean << ", "
+                << par_single_mean << ", "
+                << par_stdev << ", "
+                //<< par_simd_stdev << ", "
+                << par_single_stdev 
+                << "\n";
+                file.flush();
             }
-            std::cout<< ")";
         }
     }
 
-    for(auto cls: c_par_simd){
-        std::vector<double> x;
-        std::vector<double> y;
-
-        for(auto i: cls){
-            x.push_back(points[i][0]);
-            y.push_back(points[i][1]);
-        }
-        
-        auto l = matplot::scatter(x,y);
-    }
-
-    matplot::show();*/
+    file.close();    
 }

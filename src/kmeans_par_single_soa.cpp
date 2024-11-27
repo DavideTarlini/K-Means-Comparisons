@@ -18,8 +18,8 @@ inline double distance_par_single_soa(const std::vector<std::vector<double>>& da
 std::vector<int> kmeans_par_single_soa(const int k, const std::vector<std::vector<double>>& points, const std::vector<std::vector<double>> &init_centroids) {
     const int MAX_ITERATIONS = 100;
     const double epsilon = 100;
-    long numPoints = points.size();
-    int dim = points[0].size();
+    long dim = points.size();
+    int numPoints = points[0].size();
     std::vector<int> cluster_labels(numPoints, -1);
     std::vector<std::vector<double>> centroids = init_centroids;
 
