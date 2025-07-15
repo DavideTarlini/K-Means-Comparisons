@@ -9,8 +9,8 @@
 #include <random>
 #include <algorithm>
 
-#include "kmeans_seqs.h"
-#include "kmeans_pars.h"
+#include "kmeans_seq.h"
+#include "kmeans_par.h"
 
 
 void generatePoints(int n, int dim, int numClusters, std::vector<std::vector<double>> &points, std::vector<std::vector<double>> &pointsSOA) {
@@ -85,7 +85,6 @@ void init_centroids(const std::vector<std::vector<double>> &points, const int k,
     }
 }
 
-// Times and Speedups of the 3 versions: 2-step, 1-step, 1-step + SOA
 void exp_1(){
     using namespace std::chrono_literals;
 
@@ -209,7 +208,7 @@ void exp_1(){
                     time_res[1][w] = ms_par.count();
                     time_res[2][w] = ms_seq_single.count();  
                     time_res[3][w] = ms_par_single.count();
-                    time_res[5][w] = ms_seq_single_soa.count();
+                    time_res[4][w] = ms_seq_single_soa.count();
                     time_res[5][w] = ms_par_single_soa.count();
 
                     auto speedup_par = ms_seq/ms_par;

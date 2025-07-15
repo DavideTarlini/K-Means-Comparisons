@@ -1,4 +1,4 @@
-#include "kmeans_seqs.h"
+#include "kmeans_seq.h"
 
 #include <iostream>
 #include <vector>

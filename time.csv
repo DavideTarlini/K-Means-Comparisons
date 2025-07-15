@@ -1,4 +1,0 @@
-th, k, dim, num_points, seq_mean, par_mean, seq_single_mean, par_single_mean, seq_single_soa_mean, par_single_soa_mean, seq_std, par_std, seq_single_std, par_single_std, seq_single_soa_std, par_single_soa_std
-2, 5, 2, 1000, 11.0993, 7.82485, 3.24691, 2.90714, 0, 1.61621, 7.11278, 3.31413, 1.61259, 1.3965, 0, 0.758477
-2, 5, 2, 10000, 82.3501, 48.9834, 30.4608, 23.0418, 0, 6.28988, 28.0629, 18.2423, 14.941, 23.8538, 0, 3.10974
-2, 5, 2, 100000, 895.42, 520.941, 304.616, 167.136, 0, 52.135, 416.366, 230.171, 137.448, 69.8443, 0, 24.6823
