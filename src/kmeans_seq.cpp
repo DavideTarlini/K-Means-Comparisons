@@ -32,6 +32,7 @@ inline double distance_seq_soa(const std::vector<std::vector<double>>& d1, const
     return sum;
 }
 
+
 /*
 *
 *   SEQUENTIAL + DOUBLE
@@ -87,7 +88,7 @@ std::vector<std::vector<double>> get_new_centroids_seq(const std::vector<std::ve
     return centroids;
 }
 
-std::vector<std::vector<long>> kmeans_seq(const int k, const std::vector<std::vector<double>> &points, const std::vector<std::vector<double>> init_centroids){
+std::vector<std::vector<double>> kmeans_seq(const int k, const std::vector<std::vector<double>> &points, const std::vector<std::vector<double>> init_centroids){
     std::vector<std::vector<long>> clusters;
     std::vector<std::vector<double>> centroids = init_centroids;
     const int MAX_ITERATIONS = 100; 
@@ -102,27 +103,27 @@ std::vector<std::vector<long>> kmeans_seq(const int k, const std::vector<std::ve
             dist += distance_seq(centroids[j], new_centroids[j]);
         }
 
+        centroids = new_centroids;
+
         if(dist <= epsilon) 
             break;
-        else 
-            centroids = new_centroids;
     }
 
-    return clusters;
+    return centroids;
 }
+
 
 /*
 *
-*   SEQUENTIAL + SINGLE
+*   SEQUENTIAL + SINGLE + AOS
 *
 */
 
-std::vector<int> kmeans_seq_single(const int k, const std::vector<std::vector<double>> &points, const std::vector<std::vector<double>> init_centroids) {
+std::vector<std::vector<double>> kmeans_seq_single(const int k, const std::vector<std::vector<double>> &points, const std::vector<std::vector<double>> init_centroids) {
     const int MAX_ITERATIONS = 100;
     const double epsilon = 100;
     long numPoints = points.size();
     int dim = points[0].size();
-    std::vector<int> cluster_labels(numPoints, -1);
     std::vector<std::vector<double>> centroids = init_centroids;
 
     std::vector<std::vector<double>> newCentroids(k, std::vector<double>(dim, 0.0));
@@ -147,8 +148,6 @@ std::vector<int> kmeans_seq_single(const int k, const std::vector<std::vector<do
                 }
             }
 
-            cluster_labels[i] = closestCluster;
-
             for (int k = 0; k < dim; k++) {
                 newCentroids[closestCluster][k] += points[i][k];
             }
@@ -169,15 +168,84 @@ std::vector<int> kmeans_seq_single(const int k, const std::vector<std::vector<do
             dist += distance_seq(centroids[j], newCentroids[j]);
         }
 
+        centroids = newCentroids;
+
         if(dist <= epsilon) 
             break;
-        else{
-            centroids = newCentroids;
-        }
 
     }
 
-    return cluster_labels;
+    return centroids;
+}
+
+
+/*
+*
+*   SEQUENTIAL + SINGLE + AOS + SIMD
+*
+*/
+
+std::vector<std::vector<double>> kmeans_seq_single_simd(const int k, const std::vector<std::vector<double>> &points, const std::vector<std::vector<double>> &init_centroids)
+{
+    const int MAX_ITERATIONS = 100;
+    const double epsilon = 100;
+    long numPoints = points.size();
+    int dim = points[0].size();
+    std::vector<std::vector<double>> centroids = init_centroids;
+
+    std::vector<std::vector<double>> newCentroids(k, std::vector<double>(dim, 0.0));
+    std::vector<int> clusterSizes(k, 0);
+
+    for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
+        for (int i = 0; i < k; i++) {
+            std::fill(newCentroids[i].begin(), newCentroids[i].end(), 0.0);
+            clusterSizes[i] = 0;
+        }
+
+
+        for (int i = 0; i < numPoints; i++) {
+            double minDist = std::numeric_limits<double>::max();
+            int closestCluster = 0;
+
+            for (int j = 0; j < k; j++) {
+                double dist = distance_seq(points[i], centroids[j]);
+                if (dist < minDist) {
+                    minDist = dist;
+                    closestCluster = j;
+                }
+            }
+
+            #pragma omp simd
+            for (int k = 0; k < dim; k++) {
+                newCentroids[closestCluster][k] += points[i][k];
+            }
+            clusterSizes[closestCluster]++;
+        }
+
+
+        for (int i = 0; i < k; i++) {
+            if (clusterSizes[i] > 0) {
+                #pragma omp simd
+                for (int j = 0; j < dim; j++) {
+                    newCentroids[i][j] = newCentroids[i][j] / clusterSizes[i];
+                }
+            }
+        }
+
+        double dist = 0;
+        #pragma omp simd
+        for(int j = 0; j<centroids.size(); j++){
+            dist += distance_seq(centroids[j], newCentroids[j]);
+        }
+
+        centroids = newCentroids;
+
+        if(dist <= epsilon) 
+            break;
+
+    }
+
+    return centroids;
 }
 
 
@@ -187,12 +255,11 @@ std::vector<int> kmeans_seq_single(const int k, const std::vector<std::vector<do
 *
 */
 
-std::vector<int> kmeans_seq_single_soa(const int k, const std::vector<std::vector<double>>& points, const std::vector<std::vector<double>> &init_centroids) {
+std::vector<std::vector<double>> kmeans_seq_single_soa(const int k, const std::vector<std::vector<double>>& points, const std::vector<std::vector<double>> &init_centroids) {
     const int MAX_ITERATIONS = 100;
     const double epsilon = 100;
     long dim = points.size();
     int numPoints = points[0].size();
-    std::vector<int> cluster_labels(numPoints, -1);
     std::vector<std::vector<double>> centroids = init_centroids;
 
     std::vector<std::vector<double>> newCentroids(dim, std::vector<double>(k, 0.0));
@@ -221,8 +288,6 @@ std::vector<int> kmeans_seq_single_soa(const int k, const std::vector<std::vecto
                 }
             }
 
-            cluster_labels[i] = closestCluster;
-
             for (int j = 0; j < dim; j++) {
                 newCentroids[j][closestCluster] += points[j][i];
             }
@@ -242,12 +307,85 @@ std::vector<int> kmeans_seq_single_soa(const int k, const std::vector<std::vecto
             dist += distance_seq_soa(centroids, newCentroids, j, j, dim);
         }
 
+        centroids = newCentroids;
+
         if(dist <= epsilon) 
             break;
-        else{
-            centroids = newCentroids;
-        }
+
     }
 
-    return cluster_labels;
+    return centroids;
+}
+
+
+/*
+*
+*   SEQUENTIAL + SINGLE + SOA + SIMD
+*
+*/
+
+std::vector<std::vector<double>> kmeans_seq_single_soa_simd(const int k, const std::vector<std::vector<double>> &points, const std::vector<std::vector<double>> &init_centroids)
+{
+    const int MAX_ITERATIONS = 100;
+    const double epsilon = 100;
+    long dim = points.size();
+    int numPoints = points[0].size();
+    std::vector<std::vector<double>> centroids = init_centroids;
+
+    std::vector<std::vector<double>> newCentroids(dim, std::vector<double>(k, 0.0));
+    std::vector<int> clusterSizes(k, 0);
+
+    for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
+        for (int i = 0; i < k; i++) {
+            clusterSizes[i] = 0;
+            for (int j = 0; j < dim; j++) {
+                newCentroids[j][i] = 0.0;
+            }
+        }
+
+        std::vector<std::vector<double>> localCentroids(dim, std::vector<double>(k, 0.0));
+        std::vector<int> localClusterSizes(k, 0);
+
+        for (long i = 0; i < numPoints; i++) {
+            double minDist = std::numeric_limits<double>::max();
+            int closestCluster = 0;
+
+            for (int j = 0; j < k; j++) {
+                double dist = distance_seq_soa(points, centroids, i, j, dim);
+                if (dist < minDist) {
+                    minDist = dist;
+                    closestCluster = j;
+                }
+            }
+
+            #pragma omp simd
+            for (int j = 0; j < dim; j++) {
+                newCentroids[j][closestCluster] += points[j][i];
+            }
+            clusterSizes[closestCluster]++;
+        }
+
+        for (int i = 0; i < k; i++) {
+            if (clusterSizes[i] > 0) {
+                #pragma omp simd
+                for (int j = 0; j < dim; j++) {
+                    newCentroids[j][i] = newCentroids[j][i] / clusterSizes[i];
+                }
+            }
+        }
+
+        double dist = 0;
+        #pragma omp simd
+        for(int j = 0; j<k; j++){
+            dist += distance_seq_soa(centroids, newCentroids, j, j, dim);
+        }
+
+        centroids = newCentroids;
+
+        if(dist <= epsilon) 
+            break;
+
+    }
+
+    return centroids;
 }
